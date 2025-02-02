@@ -136,7 +136,7 @@ if prompt := st.text_input("Chat with us"):
         st.session_state.messages.history.append({"role": "user", "content": prompt})
         st.session_state.messages.history.append({"role": "model", "content": gemini_response})
 
-
+print("Nothing")
 
         # client = gemini_model
         # print(client)

@@ -7,7 +7,7 @@ from google.cloud import vision
 from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 # from google.oauth2 import service_account
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/nitro/OneDrive - University of Sharjah/Desktop/me/unies-shit/mcmaster/hackathon/NutriScanAI/nutri-scan-api-671d1d976916.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/nitro/OneDrive - University of Sharjah/Desktop/me/unies-shit/mcmaster/hackathon/NutriScanAI/.nutri-scan-api-671d1d976916.json"
 
 # Load FastText model (you need to change this path to the actual model path)
 # FASTTEXT_MODEL_PATH = 'path_to_your_model/crawl-300d-2M-subword.bin'
