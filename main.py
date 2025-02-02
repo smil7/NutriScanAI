@@ -1,17 +1,38 @@
 import os
 import streamlit as st
-#import geneai as genai
+import google.generativeai as genai
+import utils
 from PIL import Image
+
+# genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 #title
 st.title("NutriScan AI")
 
 #init session variable at the start once
 # if 'model' not in st.session_state:
-#     st.session_state['model'] = genai(api_key=os.getenv('GENEAI_API_KEY'))
+#     st.session_state['model'] = genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-if 'messages' not in st.session_state:
-    st.session_state['messages'] = []
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+generation_config = {
+  "temperature": 0,
+  "top_p": 0.95,
+  "top_k": 40,
+  "max_output_tokens": 8192,
+  "response_mime_type": "text/plain",
+}
+
+if 'count' not in st.session_state:
+	st.session_state.count = 1
+
+def increment_counter():
+	st.session_state.count += 1
+
+def fetch_gemini_response(user_query):
+    # Use the session's model to generate a response
+    response = st.session_state.messages.model.generate_content(user_query)
+    print(f"Gemini's Response: {response}")
+    return response.parts[0].text
 
 # Move everything to the sidebar
 with st.sidebar:
@@ -23,62 +44,120 @@ with st.sidebar:
     # Handle the chosen option
     if option == "Upload an Image":
         # File uploader widget
-        uploaded_image = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        uploaded_image = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
         
         if uploaded_image is not None:
             # Save the uploaded image
             save_dir = "uploaded_images"
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
-            image_path = os.path.join(save_dir, uploaded_image.name)
-            image = Image.open(uploaded_image)
-            image.save(image_path)
-            # st.success(f"Image saved at: `{image_path}`")
-            store_button = st.button("Store")
+            # directory_path = '\uploaded_images'
+            images = [img for img in uploaded_image]
+            #print(images)
+            # st.write(len(uploaded_image))
+            for img in images:
+                image_path = os.path.join(save_dir, img.name)
+                image = Image.open(img)
+                image.save(image_path)
+        
+            directory_path = "./uploaded_images"
+            print("Files: ")
+            files = os.listdir(directory_path)
+            print(files)
+            print('From uploaded image condition: ')
+            files_path = [os.path.join(directory_path, file).replace('\\', '/') for file in os.listdir(directory_path)]
+            print(files_path)
+            
+            #store_button = st.button("Store", on_click=utils.extract_text_from_image(files_path)) # return to it later (might just use one button)
+            if st.button("Store"):
+                extracted_texts_list = utils.extract_text_from_image(files_path)
+                text_embeddings = utils.embed_text(extracted_texts_list)
+                utils.store_embedding_in_faiss(text_embeddings)
 
     elif option == "Capture a Photo":
+        st.button('Increment', on_click=increment_counter)
+        st.write('Count = ', st.session_state.count)
         # Camera input widget
         captured_image = st.camera_input("Take a photo")
-        
+
         if captured_image is not None:
             # Save the captured image
             save_dir = "captured_images"
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
-            image_path = os.path.join(save_dir, "captured_photo.jpg")
+
+            image_path = os.path.join(save_dir, "captured_photo_" + str(st.session_state.count) + ".jpg")
+
             with open(image_path, "wb") as f:
                 f.write(captured_image.getvalue())
-            #st.success(f"Image saved at: `{image_path}`")
-            store_button = st.button("Store")
-    
-    
 
+            directory_path = "./captured_images"
+            print("Files: ")
+            files = os.listdir(directory_path)
+            print(files)
+            print('From capture a photo condition: ')
+            files_path = [os.path.join(directory_path, file).replace('\\', '/') for file in os.listdir(directory_path)]
+            print(files_path)
+           
+            if st.button("Store"):
+                extracted_texts_list = utils.extract_text_from_image(files_path)
+                text_embeddings = utils.embed_text(extracted_texts_list)
+                utils.store_embedding_in_faiss(text_embeddings)
 
+gemini_model = genai.GenerativeModel(
+  model_name="gemini-2.0-flash-exp",
+  generation_config=generation_config,
+  system_instruction="""You are an expert at analyzing nutrition facts from products and providing a recommendations for the user.
+    Your task is to engage in conversations about nutritions, dietry and symptoms and answer questions.
+    Use the nutrition facts that are stored in the vector database as well as the prompt the user has prompted
+    to provide a specific recommendation for their usecase. TWO IMPORTANT NOTEs:
+    1) If there was a prompt that the user entered is outside your expertise are then inform the user that this query is not related and out of context
+    2) Please make your response consie and clear""",
+)
 
+if 'messages' not in st.session_state:
+    st.session_state.messages = gemini_model.start_chat(history=[])
 
 #update the interface with previous messages
-for message in st.session_state['messages']:
-    with st.chat_message(message['role']):
+for message in st.session_state.messages.history:
+    with st.chat_message(utils.map_role(message['role'])):
         st.markdown(message['content'])
 
 #create chat interface
 if prompt := st.text_input("Chat with us"):
-    st.session_state['messages'].append({'role': 'user', 'content': prompt})
-    with st.chat_message('user'):
-        st.markdown(prompt)
+    # st.session_state['messages'].append({'role': 'user', 'parts': prompt})
+    st.chat_message('user').markdown(prompt)
+    gemini_response = fetch_gemini_response(prompt)
 
-#get response from the model
-# with st.chat_message('assistant'):
-#     client = st.session_state['model']
-#     stream = client.chat.completions.create(
-#         model='gpt-3.5-turbo',
-#         messages=[
-#             {"role": message['role'], "content": message["content"]} for message in st.session_state['messages']
-#         ],
-#         stream = True
-#     )
-# response = st.write_stream(stream)
-# st.session_state['messages'].append({'role': 'assistant', 'content': response})
+    #get response from the model
+    with st.chat_message('assistant'):
+        st.markdown(gemini_response)
+
+        st.session_state.messages.history.append({"role": "user", "content": prompt})
+        st.session_state.messages.history.append({"role": "model", "content": gemini_response})
+
+
+
+        # client = gemini_model
+        # print(client)
+        # chat_session = gemini_model.start_chat(
+        #     history = st.session_state['messages']
+        # )
+        # response = chat_session.send_message(prompt)
+        # response_text = response.text if hasattr(response, "text") else response.parts[0].text
+
+        # stream = st.write(response)
+        # print(stream)
+        # st.session_state['messages'].append({'role': 'model', 'parts': stream})
+
+        # stream = client.chat.completions.create(
+        #     model=gemini_model,
+        #     messages=[
+        #         {"role": message['role'], "content": message["content"]} for message in st.session_state['messages']
+        #     ],
+        #     stream = True
+        # )
+        
 
 
 #handle message overflow based on the model size
