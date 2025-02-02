@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import google.generativeai as genai
 import utils
+import faiss
 from PIL import Image
 
 # genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -12,6 +13,9 @@ st.title("NutriScan AI")
 #init session variable at the start once
 # if 'model' not in st.session_state:
 #     st.session_state['model'] = genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+if "extracted_text" not in st.session_state:
+    st.session_state["extracted_text"] = ''
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 generation_config = {
@@ -68,11 +72,10 @@ with st.sidebar:
             files_path = [os.path.join(directory_path, file).replace('\\', '/') for file in os.listdir(directory_path)]
             print(files_path)
             
-            #store_button = st.button("Store", on_click=utils.extract_text_from_image(files_path)) # return to it later (might just use one button)
             if st.button("Store"):
-                extracted_texts_list = utils.extract_text_from_image(files_path)
-                text_embeddings = utils.embed_text(extracted_texts_list)
-                utils.store_embedding_in_faiss(text_embeddings)
+                txts_list = utils.extract_text_from_image(files_path)
+                for txt in txts_list:
+                    st.session_state["extracted_text"] += txt
 
     elif option == "Capture a Photo":
         st.button('Increment', on_click=increment_counter)
@@ -100,9 +103,9 @@ with st.sidebar:
             print(files_path)
            
             if st.button("Store"):
-                extracted_texts_list = utils.extract_text_from_image(files_path)
-                text_embeddings = utils.embed_text(extracted_texts_list)
-                utils.store_embedding_in_faiss(text_embeddings)
+                txts_list = utils.extract_text_from_image(files_path)
+                for txt in txts_list:
+                    st.session_state["extracted_text"] += txt
 
 gemini_model = genai.GenerativeModel(
   model_name="gemini-2.0-flash-exp",
@@ -115,6 +118,9 @@ gemini_model = genai.GenerativeModel(
     2) Please make your response consie and clear""",
 )
 
+print("EXtraacted texts: ")
+print(st.session_state["extracted_text"])
+
 if 'messages' not in st.session_state:
     st.session_state.messages = gemini_model.start_chat(history=[])
 
@@ -123,41 +129,18 @@ for message in st.session_state.messages.history:
     with st.chat_message(utils.map_role(message['role'])):
         st.markdown(message['content'])
 
+all_input = st.session_state["extracted_text"]
 #create chat interface
 if prompt := st.text_input("Chat with us"):
-    # st.session_state['messages'].append({'role': 'user', 'parts': prompt})
+    
+    all_input += "\n" + prompt
     st.chat_message('user').markdown(prompt)
-    gemini_response = fetch_gemini_response(prompt)
+    gemini_response = fetch_gemini_response(all_input)
 
     #get response from the model
     with st.chat_message('assistant'):
         st.markdown(gemini_response)
 
-        st.session_state.messages.history.append({"role": "user", "content": prompt})
+        st.session_state.messages.history.append({"role": "user", "content": all_input})
         st.session_state.messages.history.append({"role": "model", "content": gemini_response})
 
-print("Nothing")
-
-        # client = gemini_model
-        # print(client)
-        # chat_session = gemini_model.start_chat(
-        #     history = st.session_state['messages']
-        # )
-        # response = chat_session.send_message(prompt)
-        # response_text = response.text if hasattr(response, "text") else response.parts[0].text
-
-        # stream = st.write(response)
-        # print(stream)
-        # st.session_state['messages'].append({'role': 'model', 'parts': stream})
-
-        # stream = client.chat.completions.create(
-        #     model=gemini_model,
-        #     messages=[
-        #         {"role": message['role'], "content": message["content"]} for message in st.session_state['messages']
-        #     ],
-        #     stream = True
-        # )
-        
-
-
-#handle message overflow based on the model size

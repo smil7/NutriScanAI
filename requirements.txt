@@ -3,3 +3,6 @@ google-generativeai
 google-cloud-vision
 faiss
 vertexai
+langchain
+langchain_google_genai
+langchain-community
